@@ -776,7 +776,7 @@ pnl: form.pnl === "" || form.pnl === "-" ? null : Number(form.pnl),
                               )}
                               {time && (
                                 <span className="text-xs text-slate-500 ml-auto">
-                                  🕐 {time}
+                                   {time}
                                 </span>
                               )}
                             </div>
