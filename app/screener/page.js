@@ -118,7 +118,7 @@ export default function ScreenerPage() {
             {coins.length} pair dianalisis
             {loading && (
               <span className="text-cyan-400 ml-2">
-                ⏳ Refresh... {loadingCountdown}s
+                 Refresh... {loadingCountdown}s
               </span>
             )}
           </p>
@@ -127,7 +127,7 @@ export default function ScreenerPage() {
         {/* Loading awal */}
         {loading && coins.length === 0 && (
           <div className="text-center py-10">
-            <div className="text-cyan-400 text-lg mb-2">⏳ Memuat data...</div>
+            <div className="text-cyan-400 text-lg mb-2"> Memuat data...</div>
             <div className="text-slate-400 text-sm mb-4">
               Estimasi: {loadingCountdown} detik lagi
             </div>
