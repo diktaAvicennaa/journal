@@ -20,6 +20,7 @@ function formatIDR(value) {
 }
 function formatNumberInput(value) {
   const str = String(value ?? "");
+  if (str === "-") return "-";
   const isNegative = str.trim().startsWith("-");
   const digits = str.replace(/\D/g, "");
   if (!digits) return isNegative ? "-" : "";
@@ -29,6 +30,7 @@ function formatNumberInput(value) {
 
 function parseNumberInput(value) {
   const str = String(value ?? "");
+  if (str === "-") return "-";   // ← KUNCI: simpan tanda minus saja
   const isNegative = str.trim().startsWith("-");
   const digits = str.replace(/\D/g, "");
   if (!digits) return "";
@@ -173,7 +175,7 @@ export default function Home() {
         sl: form.sl === "" ? null : Number(form.sl),
         tp: form.tp === "" ? null : Number(form.tp),
         lot: form.lot === "" ? null : Number(form.lot),
-        pnl: form.pnl === "" ? null : Number(form.pnl),
+pnl: form.pnl === "" || form.pnl === "-" ? null : Number(form.pnl),
         rr: form.rr || null,
         session: form.session,
         strategy: form.strategy || null,
