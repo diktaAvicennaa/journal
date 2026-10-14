@@ -3,16 +3,49 @@ import { useEffect, useState } from "react";
 import {
   getTrades,
   addTrade,
+  updateTrade,
   deleteTrade,
   uploadImage,
   compressImage,
 } from "../lib/supabase";
 
+function formatIDR(value) {
+  const num = Number(value) || 0;
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(num);
+}
+function formatNumberInput(value) {
+  const str = String(value ?? "");
+  const isNegative = str.trim().startsWith("-");
+  const digits = str.replace(/\D/g, "");
+  if (!digits) return isNegative ? "-" : "";
+  const formatted = Number(digits).toLocaleString("id-ID");
+  return isNegative ? "-" + formatted : formatted;
+}
+
+function parseNumberInput(value) {
+  const str = String(value ?? "");
+  const isNegative = str.trim().startsWith("-");
+  const digits = str.replace(/\D/g, "");
+  if (!digits) return "";
+  const num = Number(digits);
+  return isNegative ? -num : num;
+}
 const CHECKLIST_ITEMS = [
   { key: "time", label: "Time Alignment — Sweep/Run di Killzone WIB" },
-  { key: "structure", label: "Structure Bias — Bullish Sweep/Run Low / Bearish Sweep/Run High" },
+  {
+    key: "structure",
+    label: "Structure Bias — Bullish Sweep/Run Low / Bearish Sweep/Run High",
+  },
   { key: "pdArray", label: "PD Array — Berhimpitan FVG / Order Block" },
-  { key: "candle", label: "Candle Behavior — Wick Rejection / Trap 1-2 Candle" },
+  {
+    key: "candle",
+    label: "Candle Behavior — Wick Rejection / Trap 1-2 Candle",
+  },
   { key: "ltf", label: "LTF Confirmation — MSS/CHoCH + FVG/Fibo (1m-5m)" },
 ];
 
@@ -44,6 +77,8 @@ export default function Home() {
   const [filter, setFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [existingImageUrl, setExistingImageUrl] = useState(null);
 
   async function load() {
     const data = await getTrades();
@@ -90,46 +125,81 @@ export default function Home() {
     }
   }
 
-async function handleSubmit(e) {
-  e.preventDefault();
-  setLoading(true);
-  try {
-    let image_url = null;
-    if (file) image_url = await uploadImage(file);
-
-    // Bersihin data: ubah "" jadi null untuk kolom numeric
-    const cleaned = {
-      pair: form.pair,
-      direction: form.direction,
-      entry: form.entry === "" ? null : Number(form.entry),
-      sl: form.sl === "" ? null : Number(form.sl),
-      tp: form.tp === "" ? null : Number(form.tp),
-      lot: form.lot === "" ? null : Number(form.lot),
-      pnl: form.pnl === "" ? null : Number(form.pnl),
-      rr: form.rr || null,
-      session: form.session,
-      strategy: form.strategy || null,
-      emotion: form.emotion,
-      notes: form.notes || null,
-      setup_type: form.setup_type || null,
-      bias: form.bias || null,
-      image_url,
-      checklist,
-      killzone: checklist.time || false,
-    };
-
-    await addTrade(cleaned);
+  function resetForm() {
     setForm(EMPTY);
     setChecklist({});
     setFile(null);
     setPreview(null);
-    e.target.reset();
-    await load();
-  } catch (err) {
-    alert("Gagal simpan: " + err.message);
+    setExistingImageUrl(null);
+    setEditingId(null);
   }
-  setLoading(false);
-}
+
+  function startEdit(t) {
+    setEditingId(t.id);
+    setForm({
+      pair: t.pair || "",
+      direction: t.direction || "BUY",
+      entry: t.entry ?? "",
+      sl: t.sl ?? "",
+      tp: t.tp ?? "",
+      lot: t.lot ?? "",
+      pnl: t.pnl ?? "",
+      rr: t.rr || "",
+      session: t.session || "London",
+      strategy: t.strategy || "",
+      emotion: t.emotion || "Neutral",
+      notes: t.notes || "",
+      setup_type: t.setup_type || "",
+      bias: t.bias || "",
+    });
+    setChecklist(t.checklist || {});
+    setFile(null);
+    setPreview(null);
+    setExistingImageUrl(t.image_url || null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      let image_url = existingImageUrl;
+      if (file) image_url = await uploadImage(file);
+
+      const cleaned = {
+        pair: form.pair,
+        direction: form.direction,
+        entry: form.entry === "" ? null : Number(form.entry),
+        sl: form.sl === "" ? null : Number(form.sl),
+        tp: form.tp === "" ? null : Number(form.tp),
+        lot: form.lot === "" ? null : Number(form.lot),
+        pnl: form.pnl === "" ? null : Number(form.pnl),
+        rr: form.rr || null,
+        session: form.session,
+        strategy: form.strategy || null,
+        emotion: form.emotion,
+        notes: form.notes || null,
+        setup_type: form.setup_type || null,
+        bias: form.bias || null,
+        image_url,
+        checklist,
+        killzone: checklist.time || false,
+      };
+
+      if (editingId) {
+        await updateTrade(editingId, cleaned);
+      } else {
+        await addTrade(cleaned);
+      }
+
+      resetForm();
+      e.target.reset();
+      await load();
+    } catch (err) {
+      alert("Gagal simpan: " + err.message);
+    }
+    setLoading(false);
+  }
 
   async function handleDelete(id) {
     if (!confirm("Hapus trade ini?")) return;
@@ -148,7 +218,6 @@ async function handleSubmit(e) {
       if (dateFrom && tgl < dateFrom) return false;
       if (dateTo && tgl > dateTo) return false;
     }
-
     return true;
   });
 
@@ -176,7 +245,7 @@ async function handleSubmit(e) {
         <div className="grid grid-cols-3 gap-4 mb-8">
           <StatCard
             label="Total PnL"
-            value={`$${totalPnl.toFixed(2)}`}
+            value={formatIDR(totalPnl)}
             accent={totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}
           />
           <StatCard label="Total Trade" value={filtered.length} />
@@ -187,12 +256,26 @@ async function handleSubmit(e) {
           />
         </div>
 
-        {/* FORM */}
         <form
           onSubmit={handleSubmit}
-          className="bg-slate-900/70 backdrop-blur border border-slate-800 rounded-2xl p-6 mb-8 shadow-xl"
+          className={`bg-slate-900/70 backdrop-blur border rounded-2xl p-6 mb-8 shadow-xl ${
+            editingId ? "border-cyan-500/50" : "border-slate-800"
+          }`}
         >
-          <h2 className="font-semibold mb-4 text-slate-200">Tambah Trade</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-200">
+              {editingId ? " Edit Trade" : " Tambah Trade"}
+            </h2>
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400"
+              >
+                Batal Edit
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Field label="Pair">
@@ -269,7 +352,6 @@ async function handleSubmit(e) {
               />
             </Field>
 
-
             <Field label="Lot Size">
               <input
                 type="number"
@@ -300,13 +382,16 @@ async function handleSubmit(e) {
               />
             </Field>
 
-            <Field label="PnL ($)">
+            <Field label="PnL (Rp)">
               <input
-                type="number"
-                step="any"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
                 className={inputCls}
-                value={form.pnl}
-                onChange={(e) => setForm({ ...form, pnl: e.target.value })}
+                value={formatNumberInput(form.pnl)}
+                onChange={(e) =>
+                  setForm({ ...form, pnl: parseNumberInput(e.target.value) })
+                }
               />
             </Field>
 
@@ -356,7 +441,6 @@ async function handleSubmit(e) {
             </Field>
           </div>
 
-          {/* CHECKLIST SOP */}
           <div className="mt-4 bg-slate-800/40 border border-slate-700 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-slate-200">
@@ -394,7 +478,6 @@ async function handleSubmit(e) {
             </div>
           </div>
 
-          {/* SCREENSHOT */}
           <div className="mt-4">
             <label className="block text-xs text-slate-400 mb-1">
               Screenshot
@@ -416,20 +499,21 @@ async function handleSubmit(e) {
                   <span className="text-cyan-400 animate-pulse">
                     ⏳ Memproses gambar...
                   </span>
-                ) : preview ? (
+                ) : preview || existingImageUrl ? (
                   <div className="flex items-center gap-2 w-full">
                     <img
-                      src={preview}
+                      src={preview || existingImageUrl}
                       className="h-10 rounded border border-slate-600"
                     />
                     <span className="text-xs text-slate-400 flex-1">
-                      Siap dikirim
+                      {preview ? "Siap dikirim" : "Gambar lama"}
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         setFile(null);
                         setPreview(null);
+                        setExistingImageUrl(null);
                       }}
                       className="text-rose-400 hover:text-rose-300 text-xs"
                     >
@@ -437,9 +521,7 @@ async function handleSubmit(e) {
                     </button>
                   </div>
                 ) : (
-                  <span className="text-slate-500 italic">
-                    paste gambar...
-                  </span>
+                  <span className="text-slate-500 italic">paste gambar...</span>
                 )}
               </div>
 
@@ -459,12 +541,29 @@ async function handleSubmit(e) {
             </p>
           </div>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-6 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold transition"
+              >
+                Batal
+              </button>
+            )}
             <button
               disabled={loading || uploadingImg}
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold px-6 py-2 rounded-lg shadow-lg transition disabled:opacity-50"
+              className={`font-semibold px-6 py-2 rounded-lg shadow-lg transition disabled:opacity-50 text-white ${
+                editingId
+                  ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500"
+                  : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500"
+              }`}
             >
-              {loading ? "Menyimpan..." : "Simpan Trade"}
+              {loading
+                ? "Menyimpan..."
+                : editingId
+                  ? "Update Trade"
+                  : "Simpan Trade"}
             </button>
           </div>
         </form>
@@ -587,12 +686,9 @@ async function handleSubmit(e) {
               if (!groups[day]) groups[day] = [];
               groups[day].push(t);
               return groups;
-            }, {})
+            }, {}),
           ).map(([day, items]) => {
-            const dayPnl = items.reduce(
-              (s, t) => s + (Number(t.pnl) || 0),
-              0
-            );
+            const dayPnl = items.reduce((s, t) => s + (Number(t.pnl) || 0), 0);
             const dayWins = items.filter((t) => Number(t.pnl) > 0).length;
             return (
               <div key={day}>
@@ -610,7 +706,8 @@ async function handleSubmit(e) {
                         dayPnl >= 0 ? "text-emerald-400" : "text-rose-400"
                       }`}
                     >
-                      {dayPnl >= 0 ? "+" : ""}${dayPnl.toFixed(2)}
+                      {dayPnl >= 0 ? "+" : ""}
+                      {formatIDR(Math.abs(dayPnl))}
                     </span>
                   </div>
                 </div>
@@ -628,7 +725,11 @@ async function handleSubmit(e) {
                     return (
                       <div
                         key={t.id}
-                        className="bg-slate-900/70 backdrop-blur border border-slate-800 rounded-2xl p-5 shadow-lg hover:border-slate-700 transition"
+                        className={`bg-slate-900/70 backdrop-blur border rounded-2xl p-5 shadow-lg hover:border-slate-700 transition ${
+                          editingId === t.id
+                            ? "border-cyan-500/50"
+                            : "border-slate-800"
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
@@ -644,6 +745,17 @@ async function handleSubmit(e) {
                                 }`}
                               >
                                 {t.direction}
+                              </span>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                                  pnl > 0
+                                    ? "bg-emerald-500 text-white"
+                                    : pnl < 0
+                                      ? "bg-rose-500 text-white"
+                                      : "bg-slate-600 text-slate-300"
+                                }`}
+                              >
+                                {pnl > 0 ? "WIN" : pnl < 0 ? "LOSS" : "BE"}
                               </span>
                               {t.session && (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
@@ -662,7 +774,7 @@ async function handleSubmit(e) {
                               )}
                               {time && (
                                 <span className="text-xs text-slate-500 ml-auto">
-                                   {time}
+                                  🕐 {time}
                                 </span>
                               )}
                             </div>
@@ -674,7 +786,6 @@ async function handleSubmit(e) {
                                   {t.entry || "-"}
                                 </b>
                               </span>
-                              
                               <span>
                                 SL:{" "}
                                 <b className="text-slate-200">{t.sl || "-"}</b>
@@ -704,16 +815,15 @@ async function handleSubmit(e) {
                                     isWin
                                       ? "text-emerald-400"
                                       : pnl < 0
-                                      ? "text-rose-400"
-                                      : "text-slate-200"
+                                        ? "text-rose-400"
+                                        : "text-slate-200"
                                   }
                                 >
-                                  ${pnl.toFixed(2)}
+                                  {formatIDR(pnl)}
                                 </b>
                               </span>
                             </div>
 
-                            {/* Checklist badges */}
                             {t.checklist &&
                               Object.keys(t.checklist).length > 0 && (
                                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -752,12 +862,22 @@ async function handleSubmit(e) {
                             )}
                           </div>
 
-                          <button
-                            onClick={() => handleDelete(t.id)}
-                            className="text-slate-500 hover:text-rose-400 text-sm transition"
-                          >
-                            ✕
-                          </button>
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => startEdit(t)}
+                              className="text-slate-500 hover:text-cyan-400 text-sm transition"
+                              title="Edit trade"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDelete(t.id)}
+                              className="text-slate-500 hover:text-rose-400 text-sm transition"
+                              title="Hapus trade"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
